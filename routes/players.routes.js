@@ -3,6 +3,8 @@ import Player from '../models/Player.js';
 import User from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/admin.js';
+import { validateRequest, playerSchema } from '../middleware/validation.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -19,40 +21,94 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 
     const players = await playersQuery.exec();
-    res.json(players);
+    res.json({
+      data: players,
+      success: true
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    logger.error('Error fetching players:', err);
+    res.status(500).json({ 
+      error: 'خطأ في الخادم',
+      success: false
+    });
   }
 });
 
 // POST /api/players
-router.post('/', authenticateToken, requireAdmin, async (req, res) => {
+router.post('/', authenticateToken, requireAdmin, validateRequest(playerSchema), async (req, res) => {
   try {
     const { fullName, birthYear, parentPhone, notes } = req.body;
     const player = await Player.create({ fullName, birthYear, parentPhone, notes });
-    res.status(201).json(player);
+    
+    logger.info(`Player created: ${player._id} by user: ${req.user.id}`);
+    
+    res.status(201).json({
+      data: player,
+      message: 'تم إضافة اللاعب بنجاح',
+      success: true
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    logger.error('Error creating player:', err);
+    res.status(500).json({ 
+      error: 'خطأ في الخادم',
+      success: false
+    });
   }
 });
 
 // PUT /api/players/:id
-router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requireAdmin, validateRequest(playerSchema), async (req, res) => {
   try {
-    const updated = await Player.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate(['subscriptions', 'uniform', 'registration']);
-    res.json(updated);
+    const updated = await Player.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true }
+    ).populate(['subscriptions', 'uniform', 'registration']);
+    
+    if (!updated) {
+      return res.status(404).json({
+        error: 'اللاعب غير موجود',
+        success: false
+      });
+    }
+    
+    logger.info(`Player updated: ${req.params.id} by user: ${req.user.id}`);
+    
+    res.json({
+      data: updated,
+      message: 'تم تحديث اللاعب بنجاح',
+      success: true
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    logger.error('Error updating player:', err);
+    res.status(500).json({ 
+      error: 'خطأ في الخادم',
+      success: false
+    });
   }
 });
 
 // DELETE /api/players/:id
 router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    await Player.findByIdAndDelete(req.params.id);
+    const player = await Player.findByIdAndDelete(req.params.id);
+    
+    if (!player) {
+      return res.status(404).json({
+        error: 'اللاعب غير موجود',
+        success: false
+      });
+    }
+    
+    logger.info(`Player deleted: ${req.params.id} by user: ${req.user.id}`);
+    
     res.status(204).end();
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    logger.error('Error deleting player:', err);
+    res.status(500).json({ 
+      error: 'خطأ في الخادم',
+      success: false
+    });
   }
 });
 

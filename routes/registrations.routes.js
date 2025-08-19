@@ -16,12 +16,13 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
 
 router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { playerId, hasPaid, hasSubmittedDocs } = req.body;
+    const { playerId, hasPaid, hasSubmittedDocs, paymentDate } = req.body;
     const reg = await Registration.create({
       player: playerId,
       hasPaid,
       hasSubmittedDocs,
-      amount: 500
+      amount: 500,
+      paymentDate: hasPaid ? (paymentDate || new Date()) : null
     });
     res.status(201).json(reg);
   } catch (err) {
@@ -31,7 +32,17 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 
 router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const updated = await Registration.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const { hasPaid, paymentDate, ...otherFields } = req.body;
+    
+    // Handle payment date logic
+    let updateData = { ...otherFields, hasPaid };
+    if (hasPaid) {
+      updateData.paymentDate = paymentDate || new Date();
+    } else {
+      updateData.paymentDate = null;
+    }
+    
+    const updated = await Registration.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
